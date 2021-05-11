@@ -83,8 +83,9 @@ const applyGlobalEnv = (env: GlobalEnv, v: string): Result<number> =>
     makeFailure("Element does not exists");
 
 export const globalEnvAddBinding = (v: string, addr: number): void =>{
-    theGlobalEnv.vars = makeBox(unbox(theGlobalEnv.vars).concat(makeBox(v)));
-    theGlobalEnv.addresses = makeBox(unbox(theGlobalEnv.addresses).concat(makeBox(addr)));
+    const GlobalEnv = theGlobalEnv;
+    GlobalEnv.vars = makeBox(unbox(theGlobalEnv.vars).concat(makeBox(v)));
+    GlobalEnv.addresses = makeBox(unbox(theGlobalEnv.addresses).concat(makeBox(addr)));
 }
 
 const applyExtEnv = (env: ExtEnv, v: string): Result<number> =>
