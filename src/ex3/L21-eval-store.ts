@@ -2,16 +2,17 @@
 // L2 with mutation (set!) and env-box model
 // Direct evaluation of letrec with mutation, define supports mutual recursion.
 
-import { map, reduce, repeat, zipWith } from "ramda";
+import { add, contains, map, range, reduce, repeat, zipWith } from "ramda";
 import { isBoolExp, isCExp, isLitExp, isNumExp, isPrimOp, isStrExp, isVarRef,
          isAppExp, isDefineExp, isIfExp, isLetExp, isProcExp, Binding, VarDecl, CExp, Exp, IfExp, LetExp, ProcExp, Program,
-         parseL21Exp, DefineExp} from "./L21-ast";
-import { applyEnv, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, applyEnvStore, theGlobalEnv, globalEnvAddBinding, theStore } from "./L21-env-store";
+         parseL21Exp, DefineExp, isSetExp, SetExp} from "./L21-ast";
+import { applyEnv, applyStore, makeExtEnv, Env, Store, setStore, extendStore, ExtEnv, theGlobalEnv, globalEnvAddBinding, theStore } from "./L21-env-store";
 import { isClosure, makeClosure, Closure, Value } from "./L21-value-store";
 import { applyPrimitive } from "./evalPrimitive-store";
 import { first, rest, isEmpty } from "../shared/list";
-import { Result, bind, safe2, mapResult, makeFailure, makeOk } from "../shared/result";
+import { Result, bind, safe2, mapResult, makeFailure, makeOk, isOk } from "../shared/result";
 import { parse as p } from "../shared/parser";
+import { env } from "node:process";
 
 // ========================================================
 // Eval functions
@@ -21,11 +22,12 @@ const applicativeEval = (exp: CExp, env: Env): Result<Value> =>
     isBoolExp(exp) ? makeOk(exp.val) :
     isStrExp(exp) ? makeOk(exp.val) :
     isPrimOp(exp) ? makeOk(exp) :
-    isVarRef(exp) ? ...§ :
-    isLitExp(exp) ? makeOk(exp.val as Value) :
+    isVarRef(exp) ? bind(applyEnv(env, exp.var), addr => applyStore(theStore,addr)): //changed to apply store
+    isLitExp(exp) ? makeOk(exp.val as Value) : 
     isIfExp(exp) ? evalIf(exp, env) :
     isProcExp(exp) ? evalProc(exp, env) :
     isLetExp(exp) ? evalLet(exp, env) :
+    isSetExp(exp) ? evalSet(exp, env) : //added
     isAppExp(exp) ? safe2((proc: Value, args: Value[]) => applyProcedure(proc, args))
                         (applicativeEval(exp.rator, env), mapResult((rand: CExp) => applicativeEval(rand, env), exp.rands)) :
     exp;
@@ -36,6 +38,19 @@ export const isTrueValue = (x: Value): boolean =>
 const evalIf = (exp: IfExp, env: Env): Result<Value> =>
     bind(applicativeEval(exp.test, env),
          (test: Value) => isTrueValue(test) ? applicativeEval(exp.then, env) : applicativeEval(exp.alt, env));
+
+//
+const evalSet = (exp: SetExp, env: Env): Result<void> =>
+    {
+        const variable = exp.var.var;//var that needs to be changed
+        const addr = applyEnv(env, variable);//find address the variable that needs to be changed
+        const val1 = applicativeEval(exp.val, env);//eval the value
+        return safe2((address: number, val2: Value) => makeOk(setStore(theStore, address, val2)))
+                (addr, val1);    
+    }
+
+//  safe2((val: Value, bdg: FBinding) => makeOk(setFBinding(bdg, val)))
+    //    (applicativeEval(exp.val, env), applyEnvBdg(env, exp.var.var));
 
 const evalProc = (exp: ProcExp, env: Env): Result<Closure> =>
     makeOk(makeClosure(exp.args, exp.body, env));
@@ -49,7 +64,8 @@ const applyProcedure = (proc: Value, args: Value[]): Result<Value> =>
 
 const applyClosure = (proc: Closure, args: Value[]): Result<Value> => {
     const vars = map((v: VarDecl) => v.var, proc.params);
-    const addresses: number[] = ...
+    map(x => extendStore(theStore,x) ,args);
+    const addresses: number[] = range(theStore.vals.length - args.length, theStore.vals.length);//check
     const newEnv: ExtEnv = makeExtEnv(vars, addresses, proc.env)
     return evalSequence(proc.body, newEnv);
 }
@@ -60,13 +76,24 @@ export const evalSequence = (seq: Exp[], env: Env): Result<Value> =>
     evalCExps(first(seq), rest(seq), env);
     
 const evalCExps = (first: Exp, rest: Exp[], env: Env): Result<Value> =>
-    isDefineExp(first) ? evalDefineExps(first, rest) :
+    isDefineExp(first) && isEmpty(rest) ? evalDefineExp(first, rest) :
+    isDefineExp(first) ? bind(evalDefineExp(first, rest), _ => evalSequence(rest, env)) : 
     isCExp(first) && isEmpty(rest) ? applicativeEval(first, env) :
     isCExp(first) ? bind(applicativeEval(first, env), _ => evalSequence(rest, env)) :
     first;
 
-const evalDefineExps = (def: DefineExp, exps: Exp[]): Result<Value> =>
-    // complete
+// globalEnv    
+const evalDefineExp = (def: DefineExp, exps: Exp[]): Result<Value> =>{
+    const variable = def.var.var;
+    const val = applicativeEval(def.val, theGlobalEnv);
+    const ans = evalCExps(first(exps), rest(exps), theGlobalEnv);
+    if(ans.tag === "Ok"){
+        const store = bind(val,(val1: Value) => makeOk(extendStore(theStore, ans.value))); //add the evaluated value
+        const addr = isOk(store) ? (theStore.vals.length -1) : -1;
+        globalEnvAddBinding(variable, addr); //add the var to the globalEnv
+    }
+    return ans;
+}
 
 // Main program
 // L2-BOX @@ Use GE instead of empty-env
@@ -84,7 +111,8 @@ const evalLet = (exp: LetExp, env: Env): Result<Value> => {
 
     
     return bind(vals, (vals: Value[]) => {
-        const addresses = ...
+        map(x => extendStore(theStore,x) ,vals);
+        const addresses = range(theStore.vals.length - vals.length, theStore.vals.length);
         const newEnv = makeExtEnv(vars, addresses, env)
         return evalSequence(exp.body, newEnv);
     })
