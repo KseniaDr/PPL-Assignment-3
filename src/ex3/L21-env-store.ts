@@ -19,7 +19,7 @@ export interface Store {
 }
 
 export const isStore = (x: any): x is Store => x.tag ==="Store";
-export const makeEmptyStore = (): Store => ({tag: "Store", vals: makeBox([])});
+export const makeEmptyStore = (): Store => ({tag: "Store", vals: []});
 export const theStore: Store = makeEmptyStore();
 
 // EnvModel -> E1 = (<a:1>, emptyEnv)
@@ -30,7 +30,7 @@ export const extendStore = (s: Store, val: Value): Store => {
 
 // EnvModel -> applyEnv(env, var) = env(var) , applyframe(frame, var) = frame(var)    
 export const applyStore = (store: Store, address: number): Result<Value> =>
-    (store.vals.length < address || address < 0) ? makeFailure("Elemnt does not exists"):
+    (store.vals.length < address || address < 0) ? makeFailure("Element does not exists"):
     makeOk(unbox(store.vals[address]));
     
 export const setStore = (store: Store, address: number, val: Value): void => {
@@ -79,7 +79,7 @@ export const applyEnv = (env: Env, v: string): Result<number> =>
     applyExtEnv(env, v);
 
 const applyGlobalEnv = (env: GlobalEnv, v: string): Result<number> => 
-    unbox(env.vars).includes(v) ? makeOk(unbox(env.addresses[unbox(env.vars).indexOf(v)])) :
+    unbox(env.vars).includes(v) ? makeOk(unbox(env.addresses)[unbox(env.vars).indexOf(v)]) :
     makeFailure("Element does not exists");
 
 export const globalEnvAddBinding = (v: string, addr: number): void =>{

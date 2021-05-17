@@ -12,7 +12,7 @@ import { applyPrimitive } from "./evalPrimitive-store";
 import { first, rest, isEmpty } from "../shared/list";
 import { Result, bind, safe2, mapResult, makeFailure, makeOk, isOk } from "../shared/result";
 import { parse as p } from "../shared/parser";
-import { env } from "node:process";
+//import { env } from "node:process";
 
 // ========================================================
 // Eval functions
@@ -86,13 +86,11 @@ const evalCExps = (first: Exp, rest: Exp[], env: Env): Result<Value> =>
 const evalDefineExp = (def: DefineExp, exps: Exp[]): Result<Value> =>{
     const variable = def.var.var;
     const val = applicativeEval(def.val, theGlobalEnv);
-    const ans = evalCExps(first(exps), rest(exps), theGlobalEnv);
-    if(ans.tag === "Ok"){
-        const store = bind(val,(val1: Value) => makeOk(extendStore(theStore, ans.value))); //add the evaluated value
-        const addr = isOk(store) ? (theStore.vals.length -1) : -1;
-        globalEnvAddBinding(variable, addr); //add the var to the globalEnv
-    }
-    return ans;
+    //const ans = evalCExps(first(exps), rest(exps), theGlobalEnv);
+    const store = bind(val,(val1: Value) => makeOk(extendStore(theStore, val1))); //add the evaluated value
+    const addr = isOk(store) ? (theStore.vals.length - 1) : -1;
+    globalEnvAddBinding(variable, addr); //add the var to the globalEnv
+    return addr===-1 ?  makeFailure("Failed evaluating define exp") : val;
 }
 
 // Main program
